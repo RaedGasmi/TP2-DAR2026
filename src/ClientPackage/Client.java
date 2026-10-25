@@ -1,6 +1,10 @@
 package ClientPackage;
 
-import java.io.*;
+import OperationSerializable.Operation;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Scanner;
@@ -16,47 +20,54 @@ public class Client {
             socket.connect(new InetSocketAddress(host, port));
             System.out.println("je suis un client connecte");
 
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-            BufferedReader clavier = new BufferedReader(new InputStreamReader(System.in));
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush();
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            Scanner sc = new Scanner(System.in);
             while (true) {
-                System.out.print("Entrez une operation ou 0 pour quitter: ");
-                String line = clavier.readLine();
-                if (line == null) break;
-                line = line.trim();
-                if (line.equals("0")) {
-                    System.out.println("client deconnecte");
-                    out.newLine();
-                    out.flush();
-                    break;
-                }
-                String[] parts = line.replace(" ","").splitWithDelimiters("[-+*/]",0);
-
-                if(parts.length!=3){
-                    System.out.println("syntaxe incorrect");
-                    continue;
-                }
-                try{
-                    Double.parseDouble(parts[0]);
-                    Double.parseDouble(parts[2]);
-                } catch (NumberFormatException e) {
+                System.out.print("premier operande (ou x pour quitter) : ");
+                if (!sc.hasNextDouble()) {
+                    String s=sc.next();
+                    if (s.equals("x")) break;
                     System.out.println("n'est pas un nombre");
                     continue;
                 }
-                for(String p:parts){
-                    out.write(p);
-                    out.newLine();
+                double a = sc.nextDouble();
+
+                System.out.println("operateur (+,-,*,/):");
+                String opv=sc.next();
+                if (opv.length()!=1||"+-*/".indexOf(opv.charAt(0))<0){
+                    System.out.println("operateur invalide");
+                    continue;
                 }
+                char op =opv.charAt(0);
+
+                System.out.println("deuxieme operande :");
+                if (!sc.hasNextDouble()) {
+                    System.out.println("n'est pas un nombre");
+                    sc.next();
+                    continue;
+                }
+                double b=sc.nextDouble();
+
+                out.writeObject(new Operation(a,op,b));
                 out.flush();
 
-                String resultat = in.readLine();
-                if(resultat == null){
-                    System.out.println("serveur deconnecte");
-                    break;
+                try {
+                    Object reponse=in.readObject();
+                    if (reponse instanceof Double){
+                        System.out.println("resultat: "+a+op+b+"="+reponse);
+                    } else {
+                        System.out.println("erreur serveur: "+reponse);
+                    }
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
                 }
-                System.out.println("resultat :"+parts[0]+parts[1]+parts[2]+"="+resultat);
             }
-            clavier.close();
+            out.writeObject(null);
+            out.flush();
+
+            sc.close();
             in.close();
             out.close();
             socket.close();
